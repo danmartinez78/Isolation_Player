@@ -170,11 +170,16 @@ class CustomPlayer:
         # actuate move
         my_pos = game.__last_queen_move__[game.__active_players_queen__][0:2]
         enemy_pos = game.__last_queen_move__[game.__inactive_players_queen__][0:2]
-        new_state = game[0].forecast_move(move)
+        new_board, is_over, winner = game[0].forecast_move(move)
         my_new_position = new_state.__last_queen_move__[game.__active_players_queen__][0:2]
-        enemy_new_position = new_state.__last_queen_move__[game.__inactive_players_queen__][0:2]
+        if (is_over and winner == new_state.__active_players_queen__)    
+            enemy_new_position = [15, 15] # somewhere off the board
+        else:
+            enemy_pos = new_state.__last_queen_move__[game.__inactive_players_queen__][0:2]
         # if my enemy old and new dont match -> bump -> move enemy piece
         # move my piece
+        # get black play piece
+        # put in my previous spot
 
         return selected_move
 
