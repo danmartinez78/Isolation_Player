@@ -3,7 +3,10 @@ import time
 import platform
 import random
 # import io
-import StringIO
+try:
+    from StringIO import StringIO ## for Python 2
+except ImportError:
+    from io import StringIO ## for Python 3
 # import resource
 if platform.system() != 'Windows':
     import resource
@@ -263,7 +266,7 @@ class Board:
                 return time_limit - (curr_time_millis() - move_start)
 
             if print_moves:
-                print "\n",self.__active_players_queen__, " Turn"
+                print ("\n",self.__active_players_queen__, " Turn")
 
             #try:
             legal_player_moves = self.get_legal_moves()
@@ -301,8 +304,8 @@ class Board:
             is_over, winner = self.__apply_move__(curr_move)
 
             if print_moves:
-                print "move chosen: ", curr_move
-                print self.copy().print_board()
+                print ("move chosen: ", curr_move)
+                print (self.copy().print_board())
 
             if is_over:
                 return self.__active_players_queen__, move_history, \
@@ -335,7 +338,7 @@ def game_as_text(winner, move_history,  termination="", board=Board(1, 2)):
 
     board = Board(board.__player_1__, board.__player_2__, board.width, board.height)
 
-    print "Printing the game as text."
+    print ("Printing the game as text.")
 
     last_move = (9,9,False)
     
