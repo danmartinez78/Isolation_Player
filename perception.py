@@ -187,15 +187,14 @@ class Camera:
             frame_markers = aruco.drawDetectedMarkers(frame.copy(), corners, ids)
             xc = 0
             yc = 0
-            print (corners[0][0][0])
             for x,y in corners[0][0]:
-                print(x,y)
                 xc += x
                 yc += y
             xc = int(xc/4)
             yc = int(yc/4)
             print('center:', xc, yc)
             cv2.imshow('aruco', frame_markers)
+            self.arm.set_mode()
 
     # get board state
     # find black play piece
