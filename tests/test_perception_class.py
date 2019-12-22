@@ -16,8 +16,10 @@ firmware_version = device_info['firmware_version']
 if firmware_version and not firmware_version.startswith(('0.', '1.', '2.', '3.')):
     swift.set_speed_factor(1)
 
-cam = Camera(swift, device = 1)
-cam.calibrate_fisheye_camera()
+cam = Camera(swift, device = 0, calibration_file='./src/calibration/camera_calibration_1.npz')
+# cam.calibrate_camera()
+cam.localize_game_board()
+
 swift.set_position(x = 200, y = 0, z=5, speed = 200)
 swift.flush_cmd(wait_stop=True)
 swift.flush_cmd()

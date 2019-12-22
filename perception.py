@@ -2,16 +2,57 @@ import numpy as np
 import cv2
 import glob
 import time
+from cv2 import aruco
+import copy
+import random
+import os.path
 
 
 class Camera:
-    def __init__(self, arm, device=1, calibration_file=None, position=[0, 0, 0]):
+    def __init__(self, arm, device=1, calibration_file=None, position=[0, 0, 0], resolution=[10000, 10000], offset=[0, 0, 0]):
         self.cap = cv2.VideoCapture(device)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
         self.camera_position = position
+
         if (calibration_file != None):
             # load calibration
-            None
+            extension = os.path.splitext(calibration_file)[1]
+            print(extension)
+            if extension == '.npz':
+                npzfile = np.load(calibration_file)
+                self.ret = npzfile['ret']
+                self.mtx = npzfile['mtx']
+                self.dist = npzfile['dist']
+                rvecs = npzfile['rvecs']
+                tvecs = npzfile['tvecs']
+                h = npzfile['h']
+                w = npzfile['w']
+                self.camera_matrix, self.roi = cv2.getOptimalNewCameraMatrix(
+                    self.mtx, self.dist, (w, h), 1, (w, h))
+                self.mapx, self.mapy = cv2.initUndistortRectifyMap(
+                    self.mtx, self.dist, None, self.camera_matrix, (w, h), 5)
         self.arm = arm
+
+    def get_frame(self, display_window, buffer_size):
+        for i in range(buffer_size):
+            ret, frame = self.cap.read()
+            frame = self.crop(frame)
+            cv2.imshow(display_window, frame)
+            cv2.waitKey(50)
+        return frame
+
+    def get_rectified_frame(self, display_window, buffer_size, method=1):
+        for i in range(buffer_size):
+            ret, frame = self.cap.read()
+            frame = self.crop(frame)
+            if method == 1:
+                frame = self.undistort_1(frame)
+            else:
+                frame = self.undistort_2(frame)
+            cv2.imshow(display_window, frame)
+            cv2.waitKey(50)
+        return frame
 
     def set_camera_position(self, position):
         self.camera_position = position
@@ -19,6 +60,7 @@ class Camera:
     def calibrate_camera(self):
         self.arm.set_mode(0)
         self.arm.reset(wait=True, speed=250)
+        CHECKERBOARD = (6, 6)
         criteria = (cv2.TERM_CRITERIA_EPS +
                     cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
@@ -30,62 +72,50 @@ class Camera:
         objpoints = []  # 3d point in real world space
         imgpoints = []  # 2d points in image plane.
 
-        positions = [[250, 0, 170],
-                    [250, 75, 170],
-                    [250, -75, 170],
-                    [275, 0, 125],
-                    [275, 75, 125],
-                    [275, -75, 125],
-                    [250, 0, 125],
-                    [250, 100, 125],
-                    [250, -100, 125],
-                    [200, 100, 100],
-                    [200, -100, 100],
-                    [150, 25, 125],
-                    [150, -25, 125],
-                    [175, 0, 125],
-                    [170, 50, 125],
-                    [170, -50, 125],
-                    [130, 0, 100],
-                    [130, 75, 100],
-                    [130, -75, 100]]
+        images = []
         cv2.namedWindow("frame")
-        for position in positions:
-            self.arm.set_position(
-                x=position[0], y=position[1], z=position[2], speed=200)
-            print(self.arm.get_position())
-            for i in range(30):
-                ret, frame = self.cap.read()
-                cv2.imshow('frame', frame)
-                cv2.waitKey(50)
-            cv2.imshow('frame', frame)
-            cv2.waitKey(1000)
+        self.go_to_obs_pos()
+        while len(images) < 20:
+            frame = self.get_frame("frame", 10)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             # Find the chess board corners
-            ret, corners = cv2.findChessboardCorners(gray, (6, 6), None)
-
-            # If found, add object points, image points (after refining them)
+            ret, corners = cv2.findChessboardCorners(gray, CHECKERBOARD, None)
+            # If found, add image to image list
             if ret == True:
-                objpoints.append(objp)
-
+                images.append(frame)
+                frame_w_corners = copy.deepcopy(frame)
                 corners2 = cv2.cornerSubPix(
-                    gray, corners, (11, 11), (-1, -1), criteria)
+                    gray, corners, (3, 3), (-1, -1), criteria)
+                frame_w_corners = cv2.drawChessboardCorners(
+                    frame_w_corners, CHECKERBOARD, corners2, ret)
+                cv2.imshow('frame', frame_w_corners)
+                cv2.waitKey(50)
+        self.go_to_safe_pos()
+
+        for img in images:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            ret, corners = cv2.findChessboardCorners(gray, CHECKERBOARD, None)
+            if ret == True:
+                corners2 = cv2.cornerSubPix(
+                    gray, corners, (3, 3), (-1, -1), criteria)
+                img_w_corners = copy.deepcopy(img)
+                img_w_corners = cv2.drawChessboardCorners(
+                    img_w_corners, CHECKERBOARD, corners2, ret)
+                cv2.imshow('frame', img_w_corners)
+                objpoints.append(objp)
                 imgpoints.append(corners2)
+                cv2.waitKey(50)
 
-                # Draw and display the corners
-                frame = cv2.drawChessboardCorners(frame, (6, 6), corners2, ret)
-                cv2.imshow('frame', frame)
-                cv2.waitKey(1000)
-
+        self.go_to_safe_pos()
         ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
             objpoints, imgpoints, gray.shape[::-1], None, None)
         h,  w = gray.shape[:2]
         newcameramtx, roi = cv2.getOptimalNewCameraMatrix(
             mtx, dist, (w, h), 1, (w, h))
         # undistort
-        self.arm.set_position(x=250, y=0, z=170, speed=250, wait=True)
-        for i in range(10):
-            ret, frame = self.cap.read()
+        self.go_to_obs_pos()
+        frame = self.get_frame("frame", 10)
+        self.go_to_safe_pos()
         dst = cv2.undistort(frame, mtx, dist, None, newcameramtx)
         # crop the image
         x, y, w, h = roi
@@ -111,129 +141,44 @@ class Camera:
 
         print("total error: ", mean_error/len(objpoints))
         cv2.waitKey(0)
+        write = input('write calibration to file? (y/n)')
+        if write == 'y':
+            np.savez('.src/calibration/camera_calibration', h=h, w=w,
+                     ret=ret, mtx=mtx, dist=dist, rvecs=rvecs, tvecs=tvecs)
         cv2.destroyAllWindows()
 
+    def undistort_1(self, frame):
+        dst = cv2.undistort(frame.copy(), self.mtx,
+                            self.dist, None, self.camera_matrix)
+        x, y, w, h = self.roi
+        dst = dst[y:y+h, x:x+w]
+        return dst
 
-    def calibrate_fisheye_camera(self):
-        self.arm.set_mode(0)
-        self.arm.reset(wait=True, speed=250)
-        CHECKERBOARD = (6,6)
-        subpix_criteria = (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 0.1)
-        calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_FIX_SKEW
-        objp = np.zeros((1, CHECKERBOARD[0]*CHECKERBOARD[1], 3), np.float32)
-        objp[0,:,:2] = np.mgrid[0:CHECKERBOARD[0], 0:CHECKERBOARD[1]].T.reshape(-1, 2)
-        _img_shape = None
-        objpoints = [] # 3d point in real world space
-        imgpoints = [] # 2d points in image plane.
+    def undistort_2(self, frame):
+        dst = cv2.remap(frame.copy(), self.mapx, self.mapy, cv2.INTER_LINEAR)
+        x, y, w, h = self.roi
+        dst = dst[y:y+h, x:x+w]
+        return dst
 
-        positions = [[250, 0, 170],
-                    [250, 75, 170],
-                    [250, -75, 170],
-                    [275, 0, 125],
-                    [275, 75, 125],
-                    [275, -75, 125],
-                    [250, 0, 125],
-                    [250, 50, 125],
-                    [250, -50, 125],
-                    [200, 50, 100],
-                    [200, -50, 100],
-                    [175, 0, 125],
-                    [170, 25, 125],
-                    [170, -25, 125]]
-        cv2.namedWindow("frame")
-
-        for position in positions:
-            self.arm.set_position(x = position[0], y = position[1], z = position[2], speed=200)
-            print(self.arm.get_position())
-            for i in range(30):
-                ret, frame = self.cap.read()
-                cv2.imshow('frame', frame)
-                cv2.waitKey(50)
-            cv2.imshow('frame', frame)
-            cv2.waitKey(1000)
-            _img_shape = frame.shape[:2]
-            gray = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-            # Find the chess board corners
-            ret, corners = cv2.findChessboardCorners(gray, (6, 6), None)
-
-            # If found, add object points, image points (after refining them)
-            if ret == True:
-                objpoints.append(objp)
-                cv2.cornerSubPix(gray,corners,(3,3),(-1,-1),subpix_criteria)
-                imgpoints.append(corners)
-                # Draw and display the corners
-                frame = cv2.drawChessboardCorners(frame, (6,6), corners,ret)
-                cv2.imshow('frame',frame)
-                cv2.waitKey(1000)
-        
-        N_OK = len(objpoints)
-        K = np.zeros((3, 3))
-        D = np.zeros((4, 1))
-        rvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
-        tvecs = [np.zeros((1, 1, 3), dtype=np.float64) for i in range(N_OK)]
-        ret, mtx, dist, rvecs, tvecs = cv2.fisheye.calibrate(
-        objpoints,
-        imgpoints,
-        gray.shape[::-1],
-        K,
-        D,
-        rvecs,
-        tvecs,
-        calibration_flags,
-        (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-6))
-        DIM = _img_shape
-        h,  w = gray.shape[:2]
-        map1, map2 = cv2.fisheye.initUndistortRectifyMap(K, D, np.eye(3), K, DIM, cv2.CV_16SC2)
-        # undistort
-        self.arm.set_position(x=250, y=0, z=170, speed=250, wait=True)
-        for i in range(10):
-            ret, frame = self.cap.read()
-        dst = cv2.undistort(frame, mtx, dist, None, newcameramtx)
-        # crop the image
-        dst = cv2.remap(frame, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
-        cv2.imshow('calib1', dst)
-        
-    def calibrate_fisheye(self, all_image_points, all_true_points, image_size):
-        """ Calibrate a fisheye camera from matching points.
-        :param all_image_points: Sequence[Array(N, 2)[float32]] of (x, y) image coordinates of the points.  (see  cv2.findChessboardCorners)
-        :param all_true_points: Sequence[Array(N, 3)[float32]] of (x,y,z) points.  (If from a grid, just put (x,y) on a regular grid and z=0)
-            Note that each of these sets of points can be in its own reference frame,
-        :param image_size: The (size_y, size_x) of the image.
-        :return: (rms, mtx, dist, rvecs, tvecs) where
-            rms: float - The root-mean-squared error
-            mtx: array[3x3] A 3x3 camera intrinsics matrix
-            dst: array[4x1] A (4x1) array of distortion coefficients
-            rvecs: Sequence[array[N,3,1]] of estimated rotation vectors for each set of true points
-            tvecs: Sequence[array[N,3,1]] of estimated translation vectors for each set of true points
-        """
-        assert len(all_true_points) == len(all_image_points)
-        all_true_points = list(all_true_points)  # Because we'll modify it in place
-        all_image_points = list(all_image_points)
+    def localize_game_board(self):
+        self.go_to_obs_pos()
+        cv2.namedWindow('test')
         while True:
-            assert len(all_true_points) > 0, "There are no valid images from which to calibrate."
-            try:
-                rms, mtx, dist, rvecs, tvecs = cv2.fisheye.calibrate(
-                    objectPoints=[p[None, :, :] for p in all_true_points],
-                    imagePoints=[p[:, None, :] for p in all_image_points],
-                    image_size=image_size,
-                    K=np.zeros((3, 3)),
-                    D=np.zeros((4, 1)),
-                    flags=cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC + cv2.fisheye.CALIB_CHECK_COND + cv2.fisheye.CALIB_FIX_SKEW,
-                    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001),
-                )
-                print('Found a calibration based on {} well-conditioned images.'.format(len(all_true_points)))
-                return rms, mtx, dist, rvecs, tvecs
-            except cv2.error as err:
-                try:
-                    idx = int(err.msg.split('array ')[1][0])  # Parse index of invalid image from error message
-                    all_true_points.pop(idx)
-                    all_image_points.pop(idx)
-                    print("Removed ill-conditioned image {} from the data.  Trying again...".format(idx))
-                except IndexError:
-                    raise err
+            self.get_rectified_frame('test', 10, 1)
 
-   
-   
-    # localize board 
+    def crop(self, image, size = [400, 400]):
+        cropped_image = copy.deepcopy(image)
+        y, x, c = image.shape
+        xc = int(x/2)
+        yc = int(y/2)
+        return cropped_image[yc-size[0]:yc+size[0], xc-size[1]:xc+size[1]]
+
+    def go_to_obs_pos(self, set_speed = 250):
+        self.arm.set_position(x = 175, y = 0, z = 150, speed=set_speed)
+
+    def go_to_safe_pos(self, set_speed = 50):
+        self.arm.set_position(x = 175, y = 0, z = 4, speed=set_speed)
+
+    # localize board
     # get board state
     # find black play piece
