@@ -1,10 +1,10 @@
-from perception import Camera
 import os
 import sys
 import time
 import functools
 sys.path.append(os.path.join(os.path.dirname(__file__), './uArm-Python-SDK/'))
 from uarm.wrapper import SwiftAPI
+from perception import Camera
 
 swift = SwiftAPI(filters={'hwid': 'USB VID:PID=2341:0042'})
 
@@ -16,7 +16,7 @@ firmware_version = device_info['firmware_version']
 if firmware_version and not firmware_version.startswith(('0.', '1.', '2.', '3.')):
     swift.set_speed_factor(1)
 
-cam = Camera(swift, device = 0, calibration_file='./src/calibration/camera_calibration_1.npz')
+cam = Camera(swift, device = 0, calibration_file='./calibration/camera_calibration_1.npz')
 # cam.calibrate_camera()
 cam.localize_game_board()
 

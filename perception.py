@@ -160,11 +160,6 @@ class Camera:
         dst = dst[y:y+h, x:x+w]
         return dst
 
-    def localize_game_board(self):
-        self.go_to_obs_pos()
-        cv2.namedWindow('test')
-        while True:
-            self.get_rectified_frame('test', 10, 1)
 
     def crop(self, image, size = [400, 400]):
         cropped_image = copy.deepcopy(image)
@@ -179,6 +174,28 @@ class Camera:
     def go_to_safe_pos(self, set_speed = 50):
         self.arm.set_position(x = 175, y = 0, z = 4, speed=set_speed)
 
-    # localize board
+    def localize_game_board(self):
+        self.go_to_obs_pos()
+        cv2.namedWindow('frame')
+        cv2.namedWindow('aruco')
+        aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_50)
+        while True:
+            frame = self.get_rectified_frame('frame', 10, 1)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            parameters =  aruco.DetectorParameters_create()
+            corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+            frame_markers = aruco.drawDetectedMarkers(frame.copy(), corners, ids)
+            xc = 0
+            yc = 0
+            print (corners[0][0][0])
+            for x,y in corners[0][0]:
+                print(x,y)
+                xc += x
+                yc += y
+            xc = int(xc/4)
+            yc = int(yc/4)
+            print('center:', xc, yc)
+            cv2.imshow('aruco', frame_markers)
+
     # get board state
     # find black play piece
