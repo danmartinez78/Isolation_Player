@@ -179,6 +179,8 @@ class Camera:
         cv2.namedWindow('frame')
         cv2.namedWindow('aruco')
         aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_50)
+        camera_pts = []
+        workspace_pts = []
         while True:
             frame = self.get_rectified_frame('frame', 10, 1)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -194,7 +196,11 @@ class Camera:
             yc = int(yc/4)
             print('center:', xc, yc)
             cv2.imshow('aruco', frame_markers)
-            self.arm.set_mode()
+            # move to position
+            # wait until aruco marker is aligned (user input)
+            # move to observe point
+            # record aruco coords in camera frame
+        
 
     # get board state
     # find black play piece
