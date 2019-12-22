@@ -16,10 +16,11 @@ firmware_version = device_info['firmware_version']
 if firmware_version and not firmware_version.startswith(('0.', '1.', '2.', '3.')):
     swift.set_speed_factor(1)
 
-cam = Camera(swift, device = 0, calibration_file='./calibration/camera_calibration_1.npz')
+cam = Camera(swift, device = 2, calibration_file='./calibration/camera_calibration_1.npz')
 # cam.calibrate_camera()
-cam.localize_game_board()
-
+# cam.localize_game_board()
+# cam.calibrate_camera_to_workspace()
+cam.get_test_frames(100)
 swift.set_position(x = 200, y = 0, z=5, speed = 200)
 swift.flush_cmd(wait_stop=True)
 swift.flush_cmd()

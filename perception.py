@@ -14,7 +14,9 @@ class Camera:
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
         self.camera_position = position
-
+        self.camera_pts = []
+        self.ws_pts = []
+        self.aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_50)
         if (calibration_file != None):
             # load calibration
             extension = os.path.splitext(calibration_file)[1]
@@ -174,33 +176,93 @@ class Camera:
     def go_to_safe_pos(self, set_speed = 50):
         self.arm.set_position(x = 175, y = 0, z = 4, speed=set_speed)
 
+    def go_to(self, x, y, z, set_speed = 250):
+        self.arm.set_position(x, y, z, speed=set_speed)
+
     def localize_game_board(self):
         self.go_to_obs_pos()
         cv2.namedWindow('frame')
         cv2.namedWindow('aruco')
-        aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_50)
-        camera_pts = []
-        workspace_pts = []
         while True:
             frame = self.get_rectified_frame('frame', 10, 1)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            parameters =  aruco.DetectorParameters_create()
-            corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-            frame_markers = aruco.drawDetectedMarkers(frame.copy(), corners, ids)
-            xc = 0
-            yc = 0
-            for x,y in corners[0][0]:
-                xc += x
-                yc += y
-            xc = int(xc/4)
-            yc = int(yc/4)
-            print('center:', xc, yc)
-            cv2.imshow('aruco', frame_markers)
-            # move to position
-            # wait until aruco marker is aligned (user input)
-            # move to observe point
-            # record aruco coords in camera frame
-        
+            parameters = aruco.DetectorParameters_create()
+            corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, self.aruco_dict, parameters=parameters)
+            if ids is not None:
+                frame_markers = aruco.drawDetectedMarkers(frame.copy(), corners, ids)
+                xc = 0
+                yc = 0
+                for x,y in corners[0][0]:
+                    xc += x
+                    yc += y
+                xc = int(xc/4)
+                yc = int(yc/4)
+                # print('center:', xc, yc)
+                cv2.imshow('aruco', frame_markers)
+            
 
+    def calibrate_camera_to_workspace(self):
+        positions = [[200,0],
+                    [200,50],
+                    [200,-50],
+                    [300, 0],
+                    [300,100],
+                    [300,-100],
+                    [100, 75],
+                    [100, -75]]
+        for x,y in positions:
+            # move to position
+            self.go_to(x, y, 3, 100)
+            # wait until aruco marker is aligned (user input)
+            input('continue?')
+            # move to observe point
+            self.go_to_obs_pos()
+            # detect aruco
+            pts = []
+            cv2.namedWindow('frame')
+            while len(pts)<10:
+                frame = self.get_rectified_frame('frame', 10, 1)
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                parameters = aruco.DetectorParameters_create()
+                corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, self.aruco_dict, parameters=parameters)
+                if ids is not None:
+                    frame_markers = aruco.drawDetectedMarkers(frame.copy(), corners, ids)
+                    cv2.imshow('frame', frame_markers)
+                    cv2.waitKey(100)
+                    xc = 0
+                    yc = 0
+                    for x,y in corners[0][0]:
+                        xc += x
+                        yc += y
+                    xc = int(xc/4)
+                    yc = int(yc/4)
+                    pts.append([xc, yc])
+            x_bar = 0
+            y_bar = 0
+            for xp, yp in pts:
+                x_bar += xp
+                y_bar += yp
+            x_bar = int(x_bar/10)
+            y_bar = int(y_bar/10)
+            self.camera_pts.append([y_bar,x_bar])
+            self.ws_pts.append([y,x])
+
+            # record aruco coords in camera frame
+
+    def get_test_frames(self, number_of_frames = 10):
+        self.go_to_obs_pos()
+        test_images = []
+        cv2.namedWindow('test frames')
+        while len(test_images) < 20:
+            frame = self.get_rectified_frame('test frames', 10)
+            cv2.imshow('test frames', frame)
+            cv2.waitKey(10)
+            save_image = input('save image? (y/n)')
+            if save_image:
+                test_images.append(frame.copy())
+        for i in range(len(test_images)):
+            fn = './test_images/test_image' + str(i) + '.png'
+            cv2.imwrite(fn, test_images[i],)
+    
     # get board state
     # find black play piece
