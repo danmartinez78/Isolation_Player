@@ -287,38 +287,38 @@ class Camera:
             fn = './test_images/test_image' + str(i) + '.png'
             cv2.imwrite(fn, test_images[i],)
 
-    def locate_game_pieces(self):
+    def locate_game_pieces(self, frame):
         cv2.namedWindow('gray')
         cv2.namedWindow('circles')
         cv2.namedWindow ('detections')
         cv2.namedWindow('edges')
         self.go_to_obs_pos()
-        while True:
+        if frame is None:
             frame = self.get_rectified_frame('detections', 5)
-            # cv2.waitKey(0)
-            # b = input('enter b value')
-            # g = input('enter g value')
-            # r = input('enter r value')
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            gray = median = cv2.medianBlur(gray,5)
-            cv2.imshow('gray', gray)
-            edges = cv2.Canny(gray, 10, 150)
-            cv2.imshow('edges', edges)
-            circles = cv2.HoughCircles(edges, cv2.HOUGH_GRADIENT,1,20,param1=30,param2=25, minRadius = 20, maxRadius = 45)
-            if circles is not None:
-                # convert the (x, y) coordinates and radius of the circles to integers
-                circles = np.round(circles[0, :]).astype("int")
-            
-                # loop over the (x, y) coordinates and radius of the circles
-                output = frame.copy()
-                for (x, y, r) in circles:
-                    # draw the circle in the output image, then draw a rectangle
-                    # corresponding to the center of the circle
-                    cv2.circle(output, (x, y), r, (0, 255, 0), 4)
-                    cv2.rectangle(output, (x - 5, y - 5), (x + 5, y + 5), (0, 128, 255), -1)
-            
-                # show the output image
-                cv2.imshow("circles", np.hstack([frame, output]))
-                cv2.waitKey(10)
+        # cv2.waitKey(0)
+        # b = input('enter b value')
+        # g = input('enter g value')
+        # r = input('enter r value')
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = median = cv2.medianBlur(gray,5)
+        cv2.imshow('gray', gray)
+        edges = cv2.Canny(gray, 10, 150)
+        cv2.imshow('edges', edges)
+        circles = cv2.HoughCircles(edges, cv2.HOUGH_GRADIENT,1,20,param1=30,param2=25, minRadius = 20, maxRadius = 45)
+        if circles is not None:
+            # convert the (x, y) coordinates and radius of the circles to integers
+            circles = np.round(circles[0, :]).astype("int")
+        
+            # loop over the (x, y) coordinates and radius of the circles
+            output = frame.copy()
+            for (x, y, r) in circles:
+                # draw the circle in the output image, then draw a rectangle
+                # corresponding to the center of the circle
+                cv2.circle(output, (x, y), r, (0, 255, 0), 4)
+                cv2.rectangle(output, (x - 5, y - 5), (x + 5, y + 5), (0, 128, 255), -1)
+        
+            # show the output image
+            cv2.imshow("circles", np.hstack([frame, output]))
+            cv2.waitKey(0)
     # get board state
     # find black play piece
